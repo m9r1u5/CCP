@@ -1,5 +1,5 @@
 // CCP Dose Calculator – offline cache. Bump VERSION when you upload new files.
-const VERSION = 'ccp-dose-v1';
+const VERSION = 'ccp-dose-v2';
 const ASSETS = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS)));

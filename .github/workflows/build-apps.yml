@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p assets
           cp icons/icon-512.png assets/icon-only.png
-          npx --yes @capacitor/assets@3 generate --android --iconBackgroundColor '#0A6B5F' --iconBackgroundColorDark '#0A6B5F'
+          npx --yes @capacitor/assets@3 generate --android --iconBackgroundColor '#0B5D3B' --iconBackgroundColorDark '#0B5D3B'
       - name: Build APK
         working-directory: android
         run: |
@@ -77,7 +77,7 @@ jobs:
         run: |
           mkdir -p assets
           cp icons/icon-512.png assets/icon-only.png
-          npx --yes @capacitor/assets@3 generate --ios --iconBackgroundColor '#0A6B5F'
+          npx --yes @capacitor/assets@3 generate --ios --iconBackgroundColor '#0B5D3B'
       - name: Build unsigned IPA
         working-directory: ios/App
         run: |
