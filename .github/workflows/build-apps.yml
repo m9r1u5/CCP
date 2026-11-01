@@ -1,0 +1,115 @@
+name: Build Android + iOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: CCP Dose
+  APP_ID: za.ccp.dosecalc
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: android-actions/setup-android@v3
+      - name: Copy web files
+        run: |
+          mkdir -p www
+          cp index.html manifest.json sw.js www/
+          cp -r icons www/
+      - name: Create Android project (Capacitor)
+        run: |
+          npm init -y
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+          npx cap init "$APP_NAME" "$APP_ID" --web-dir www
+          npx cap add android
+          npx cap sync android
+      - name: App icon
+        continue-on-error: true
+        run: |
+          mkdir -p assets
+          cp icons/icon-512.png assets/icon-only.png
+          npx --yes @capacitor/assets@3 generate --android --iconBackgroundColor '#0A6B5F' --iconBackgroundColorDark '#0A6B5F'
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk CCP-Dose-Calculator.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: CCP-Dose-Calculator.apk
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Copy web files
+        run: |
+          mkdir -p www
+          cp index.html manifest.json sw.js www/
+          cp -r icons www/
+      - name: Create iOS project (Capacitor)
+        run: |
+          npm init -y
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/ios@7
+          npx cap init "$APP_NAME" "$APP_ID" --web-dir www
+          npx cap add ios
+          npx cap sync ios
+      - name: App icon
+        continue-on-error: true
+        run: |
+          mkdir -p assets
+          cp icons/icon-512.png assets/icon-only.png
+          npx --yes @capacitor/assets@3 generate --ios --iconBackgroundColor '#0A6B5F'
+      - name: Build unsigned IPA
+        working-directory: ios/App
+        run: |
+          if [ -d App.xcworkspace ]; then TARGET="-workspace App.xcworkspace"; else TARGET="-project App.xcodeproj"; fi
+          xcodebuild $TARGET -scheme App -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP" && zip -qr "$GITHUB_WORKSPACE/CCP-Dose-Calculator-unsigned.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: CCP-Dose-Calculator-unsigned.ipa
+
+  release:
+    needs: [android, ios]
+    if: always() && (needs.android.result == 'success' || needs.ios.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: CCP Dose Calculator build ${{ github.run_number }}
+          body: |
+            Android: install CCP-Dose-Calculator.apk.
+            iPhone/iPad: easiest is the web app (open the GitHub Pages link in Safari → Share → Add to Home Screen).
+            The .ipa is unsigned; it needs an Apple developer account (or a sideloading tool) to install.
+          files: out/*
+          fail_on_unmatched_files: false

@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0A6B5F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CCP Dose">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}body{margin:0}</style>
+<title>CCP Dose Calculator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: sticky patient strip on top, one scrolling column (max 720px), thumb tab bar fixed at the bottom.
+   Drug cards carry an ISO-style syringe-label stripe for their drug class. */
+:root{
+  --bg:#EEF2F0; --surface:#FFFFFF; --sunk:#E3E9E6; --ink:#12201C; --muted:#56665F; --line:#CCD6D2;
+  --accent:#0A6B5F; --accent-ink:#FFFFFF; --accent-soft:#D3EAE5;
+  --warn:#8A5A00; --warn-bg:#FFF1CF; --bad:#A3212A; --bad-bg:#FBE0E1; --ok:#1C6B33;
+  --c-induction:#E9C800; --c-opioid:#3B95D4; --c-nmb:#E3343C; --c-vaso:#A97CCB; --c-benzo:#EE8420;
+  --c-fluid:#4FB3A0; --c-elec:#8C9A95; --c-other:#B3BDB9;
+  --f-ui: system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --f-num: ui-monospace,"SF Mono","Roboto Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0C1311; --surface:#141E1B; --sunk:#0F1816; --ink:#E4EDEA; --muted:#93A59F; --line:#25332F;
+  --accent:#43C3AE; --accent-ink:#04201B; --accent-soft:#163A34;
+  --warn:#F2C25B; --warn-bg:#3A2C0C; --bad:#FF8A8F; --bad-bg:#3F1518; --ok:#7FD69A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0C1311; --surface:#141E1B; --sunk:#0F1816; --ink:#E4EDEA; --muted:#93A59F; --line:#25332F;
+  --accent:#43C3AE; --accent-ink:#04201B; --accent-soft:#163A34;
+  --warn:#F2C25B; --warn-bg:#3A2C0C; --bad:#FF8A8F; --bad-bg:#3F1518; --ok:#7FD69A; color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-ui);font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--surface)}
+button,input,select{font:inherit;color:inherit}
+h1,h2,h3{text-wrap:balance;margin:0}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
+.top .wrap{padding-block:10px;display:grid;gap:10px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand h1{font-size:16px;letter-spacing:.01em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand h1 small{display:block;font-size:10.5px;overflow:hidden;text-overflow:ellipsis;font-weight:500;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.mark{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:var(--accent-ink);font-weight:800;font-size:13px;flex:none}
+.tb{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer}
+.tb:hover{border-color:var(--accent)}
+.pt{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+.fld{display:grid;gap:3px;min-width:0}
+.fld label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.inp{width:100%;min-width:0;border:1.5px solid var(--line);background:var(--sunk);border-radius:8px;padding:8px 10px;font-size:17px;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.inp:focus{border-color:var(--accent);outline:none}
+select.inp{font-family:var(--f-ui);font-size:15px}
+.grp{font-size:12px;font-weight:700;padding:7px 10px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap;align-self:center;margin-top:16px}
+.grp.on{background:var(--accent-soft);color:var(--accent)}
+
+main .wrap{padding-block:14px calc(84px + env(safe-area-inset-bottom,0px));display:grid;gap:14px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.sec-h h2{font-size:20px}
+.sec-h p{margin:0;font-size:12px;color:var(--muted)}
+.hint{font-size:13px;color:var(--muted);margin:0}
+
+/* filters */
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+
+/* drug cards */
+.list{display:grid;gap:10px}
+.drug{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;position:relative}
+.drug::before{content:"";position:absolute;inset:0 auto 0 0;width:7px;background:var(--cls)}
+.drug>header{display:flex;align-items:baseline;gap:8px;padding:11px 12px 6px 19px;flex-wrap:wrap}
+.drug h3{font-size:16px;flex:1 1 100%;min-width:0}
+.tag{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.src{font-size:11px;color:var(--muted)}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px 10px 19px;border-top:1px dashed var(--line)}
+.row .who{grid-column:1/-1;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
+.pill{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:5px;background:var(--sunk);color:var(--muted)}
+.pill.a{background:var(--accent-soft);color:var(--accent)}
+.rule{font-size:14px;min-width:0}
+.out{text-align:right}
+.out b{display:block;font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:21px;line-height:1.15}
+.out span{display:block;font-size:12.5px;color:var(--muted);font-family:var(--f-num)}
+.out .cap{color:var(--warn);font-weight:700;font-family:var(--f-ui)}
+.note{grid-column:1/-1;margin:4px 0 0;font-size:12.5px;color:var(--muted)}
+.row.dim{opacity:.42}
+.flag{grid-column:1/-1;margin:6px 0 0;font-size:12.5px;background:var(--warn-bg);color:var(--warn);padding:6px 8px;border-radius:7px}
+.need{color:var(--muted);font-size:13px}
+
+/* infusions */
+.inf{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;position:relative;padding:12px 12px 12px 19px;display:grid;gap:10px}
+.inf::before{content:"";position:absolute;inset:0 auto 0 0;width:7px;background:var(--cls)}
+.inf .prep{font-size:13px;color:var(--muted)}
+.ctl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
+.ctl .unitsel{min-width:0}
+.rate{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;background:var(--sunk);border-radius:10px;padding:10px 12px}
+.rate b{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:30px;line-height:1}
+.rate span{color:var(--muted);font-size:14px}
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+td.n,th.n{text-align:right;font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.hl td{background:var(--accent-soft);font-weight:700}
+.notes{margin:0;padding-left:18px;font-size:13px;color:var(--muted);display:grid;gap:3px}
+
+/* panels */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:10px}
+details.panel>summary{cursor:pointer;font-weight:700;font-size:15.5px;list-style:none;display:flex;justify-content:space-between;gap:8px}
+details.panel>summary::after{content:"+";color:var(--muted);font-weight:400}
+details.panel[open]>summary::after{content:"–"}
+details.panel>summary::-webkit-details-marker{display:none}
+.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.big{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:26px;font-weight:700}
+.res{background:var(--sunk);border-radius:10px;padding:10px 12px;display:grid;gap:2px}
+.res small{color:var(--muted);font-size:12px}
+.res.warn{background:var(--warn-bg)} .res.warn .big,.res.warn strong{color:var(--warn)}
+.res.bad{background:var(--bad-bg)} .res.bad .big,.res.bad strong{color:var(--bad)}
+.check{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+.check input{width:20px;height:20px;flex:none;accent-color:var(--accent);margin-top:1px}
+.check:has(input:checked) span{color:var(--muted);text-decoration:line-through}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:max-content;max-width:100%}
+.seg button{border:0;background:var(--surface);padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.btn{border:0;background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:12px 16px;font-weight:700;font-size:15px;cursor:pointer}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:var(--sunk);color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+
+/* tab bar */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs .wrap{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;padding-block:6px}
+nav.tabs button{border:0;background:none;border-radius:8px;padding:9px 2px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;min-width:0}
+nav.tabs button[aria-selected="true"]{background:var(--accent-soft);color:var(--accent)}
+
+/* overlays */
+.ov{position:fixed;inset:0;z-index:50;background:var(--bg);overflow-y:auto}
+.ov .wrap{padding-block:calc(28px + env(safe-area-inset-top,0px)) 40px;display:grid;gap:14px;max-width:560px}
+.ov h2{font-size:22px}
+.ov p{margin:0}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:10px;font-size:14px;z-index:60;max-width:calc(100% - 32px)}
+.ios{background:var(--accent-soft);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:13.5px;display:flex;gap:10px;align-items:flex-start}
+.ios button{border:0;background:none;font-size:18px;line-height:1;color:var(--muted);cursor:pointer}
+@media (max-width:380px){.pt{grid-template-columns:1fr 1fr}.grp{grid-column:1/-1;margin-top:0;justify-self:start}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">Rx</div>
+      <h1>CCP Dose Calculator<small>Cornell CCP CPG v1.5</small></h1>
+      <button class="tb" id="btn-home" type="button">Home</button>
+      <button class="tb" id="btn-install" type="button" hidden>Install</button>
+      <button class="tb" id="btn-update" type="button">Update</button>
+    </div>
+    <div class="pt">
+      <div class="fld"><label for="wt">Weight (kg)</label><input class="inp" id="wt" inputmode="decimal" placeholder="kg" autocomplete="off"></div>
+      <div class="fld"><label for="age">Age (years)</label><input class="inp" id="age" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off"></div>
+      <span class="grp" id="grp">Enter age</span>
+    </div>
+  </div>
+</header>
+
+<main><div class="wrap" id="view"></div></main>
+
+<nav class="tabs" aria-label="Sections"><div class="wrap" role="tablist">
+  <button role="tab" data-tab="doses" aria-selected="true">Doses</button>
+  <button role="tab" data-tab="inf">Infusions</button>
+  <button role="tab" data-tab="rsi">RSI</button>
+  <button role="tab" data-tab="airway">Airway</button>
+  <button role="tab" data-tab="tools">Tools</button>
+  <button role="tab" data-tab="lists">Checklists</button>
+</div></nav>
+
+<div class="ov" id="disc" hidden><div class="wrap">
+  <div class="brand"><div class="mark" aria-hidden="true">Rx</div><h1>CCP Dose Calculator<small>Before you start</small></h1></div>
+  <h2>Clinical use disclaimer</h2>
+  <p>This calculator is a quick-reference aid for qualified clinicians. Doses, dilutions and settings are taken from the Cornell CCP CPG booklet (version 1.5, 20 Nov). It does not replace your current clinical practice guidelines, the product label, medical direction or your own clinical judgement.</p>
+  <p>Check every dose, concentration and volume before you give it. The makers of this app accept no liability for how it is used.</p>
+  <div class="fld"><label for="d-name">Full name</label><input class="inp" id="d-name" autocomplete="name" style="font-family:var(--f-ui)"></div>
+  <div class="fld"><label for="d-reg">Role / registration no. (optional)</label><input class="inp" id="d-reg" style="font-family:var(--f-ui)"></div>
+  <label class="check" for="d-ok"><input type="checkbox" id="d-ok"><span style="text-decoration:none;color:var(--ink)">I have read and accept this disclaimer.</span></label>
+  <button class="btn" id="d-go" type="button" disabled>Accept and continue</button>
+  <p class="hint">Your name, role and the time are saved on this device in the acceptance log (Tools tab).</p>
+</div></div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+/* ---------- storage (safe) ---------- */
+function sget(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}
+function sset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function ssget(k){try{return sessionStorage.getItem(k)}catch(e){return null}}
+function ssset(k,v){try{sessionStorage.setItem(k,v)}catch(e){}}
+
+var $=function(s,r){return (r||document).querySelector(s)};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+function num(v){if(v==null)return null;var s=String(v).trim().replace(',','.');if(s==='')return null;var n=Number(s);return isFinite(n)?n:null}
+function fmt(n){if(n==null||!isFinite(n))return '—';var a=Math.abs(n);var d=a>=100?0:a>=10?1:a>=0.1?2:3;return String(+n.toFixed(d))}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+
+var S={wt:null,age:null,tab:sget('ccp.tab','doses'),filter:'All',q:'',rsiSheet:1};
+
+function group(){if(S.age==null)return null;return S.age>14?'adult':'paed'}
+function challenGroup(){if(S.age==null)return null;if(S.age>14)return 'adult';if(S.age>=7)return 'c7';return 'u7'}
+
+/* ---------- drug class colours (syringe label convention) ---------- */
+var CLS={induction:['Induction','--c-induction'],opioid:['Opioid','--c-opioid'],nmb:['Muscle relaxant','--c-nmb'],vaso:['Vasopressor','--c-vaso'],benzo:['Sedative / anticonvulsant','--c-benzo'],fluid:['Fluid / glucose','--c-fluid'],elec:['Electrolyte / antidote','--c-elec'],other:['Other','--c-other']};
+
+/* ---------- bolus doses (from booklet) ----------
+ row: who adult|paed|all ; kg [lo,hi] per kg ; fixed [lo,hi] ; u unit ; max cap ; conc (u per mL) ; cl conc label ; rule ; note ; flag */
+var DRUGS=[
+ {g:'Anaphylaxis',n:'Adrenaline IM (1:1000)',c:'vaso',src:'p31 · AutoCalc',rows:[
+  {who:'all',kg:[0.01],u:'mg',max:0.5,conc:1,cl:'1 mg/mL',rule:'0.01 mg/kg IM · adult dose 0.5 mg',note:'Repeat every 3–5 min as required to keep SBP >100 mmHg (adult) or >80 mmHg (paed).'}]},
+ {g:'Anaphylaxis',n:'Adrenaline IV bolus (1:10,000)',c:'vaso',src:'p31',rows:[
+  {who:'adult',fixed:[50],u:'mcg',conc:100,cl:'100 mcg/mL',rule:'50 mcg IV',note:'Inotropic support. Repeat according to response; if repeated doses are needed start the adrenaline infusion.'},
+  {who:'paed',kg:[1],u:'mcg',max:50,conc:100,cl:'100 mcg/mL',rule:'1 mcg/kg IV · max bolus 50 mcg (0.5 mL)',note:'Every 3–5 min as required to keep SBP >80 mmHg.'}]},
+ {g:'Anaphylaxis',n:'Sodium chloride 0.9%',c:'fluid',src:'p31 (ALS2)',rows:[
+  {who:'adult',fixed:[500,1000],u:'mL',rule:'500 mL – 1 L after 2nd IM adrenaline',note:'Persistent shock: 1 L after the 3rd IM adrenaline dose.'}]},
+
+ {g:'Resuscitation',n:'Adrenaline IV – cardiac arrest (1:10,000)',c:'vaso',src:'AutoCalc (paed)',rows:[
+  {who:'paed',kg:[10],u:'mcg',conc:100,cl:'100 mcg/mL',rule:'10 mcg/kg IV'}]},
+ {g:'Resuscitation',n:'Defibrillation',c:'other',src:'AutoCalc (paed)',rows:[
+  {who:'paed',kg:[4],u:'J',rule:'4 J/kg',note:'Use adult/child pads.'}]},
+ {g:'Resuscitation',n:'IV fluid bolus – sodium chloride 0.9%',c:'fluid',src:'AutoCalc (paed)',rows:[
+  {who:'paed',kg:[20],u:'mL',rule:'20 mL/kg bolus'}]},
+ {g:'Resuscitation',n:'Glucose 10%',c:'fluid',src:'AutoCalc (paed)',rows:[
+  {who:'paed',kg:[2],u:'mL',rule:'2 mL/kg IV, undiluted'}]},
+
+ {g:'RSI & sedation',n:'Ketamine – induction (RSI)',c:'induction',src:'p19 · AutoCalc',rows:[
+  {who:'all',kg:[2],u:'mg',conc:10,cl:'10 mg/mL',rule:'2 mg/kg IV/IO',note:'Dilute 200 mg in 20 mL (or 100 mg in 10 mL) = 10 mg/mL.'},
+  {who:'all',kg:[1],u:'mg',conc:10,cl:'10 mg/mL',rule:'1 mg/kg if haemodynamically compromised'}]},
+ {g:'RSI & sedation',n:'Fentanyl – RSI',c:'opioid',src:'p18',rows:[
+  {who:'adult',kg:[1,3],u:'mcg',conc:50,cl:'50 mcg/mL',rule:'1–3 mcg/kg IV, slow push over 3–5 min'},
+  {who:'paed',kg:[1],u:'mcg',conc:50,cl:'50 mcg/mL',rule:'1 mcg/kg IV, slow push over 3–5 min'}]},
+ {g:'RSI & sedation',n:'Rocuronium',c:'nmb',src:'AutoCalc (paed) · p48',rows:[
+  {who:'paed',kg:[1.2],u:'mg',rule:'1.2 mg/kg IV, undiluted (AutoCalc sheet)',note:'Concentration not stated in the booklet; check the vial.'},
+  {who:'all',kg:[2],u:'mg',rule:'2 mg/kg IV (Dr Andy Challen RSI table, all shock index bands)',note:'See the RSI tab for shock-index based induction doses.'}]},
+ {g:'RSI & sedation',n:'Propofol',c:'induction',src:'AutoCalc (paed)',rows:[
+  {who:'paed',kg:[2.5,3.5],u:'mg',rule:'2.5–3.5 mg/kg IV, undiluted',note:'Risk of cardiovascular depression. Concentration not stated in the booklet; check the vial.'}]},
+
+ {g:'Analgesia',n:'Fentanyl – analgesia',c:'opioid',src:'p18',rows:[
+  {who:'adult',kg:[1],u:'mcg',max:100,conc:50,cl:'50 mcg/mL',rule:'Loading: 1 mcg/kg slow IV over 3–5 min · max single dose 100 mcg'},
+  {who:'adult',fixed:[25,50],u:'mcg',conc:50,cl:'50 mcg/mL',rule:'Subsequent: 25–50 mcg every 5 min, titrated to effect'}]},
+ {g:'Analgesia',n:'Ketamine – analgesia',c:'induction',src:'p19',rows:[
+  {who:'adult',fixed:[10,20],u:'mg',conc:10,cl:'10 mg/mL',rule:'IV/IO initial 10–20 mg',note:'Subsequent 10–30 mg at >3 min intervals.'},
+  {who:'paed',kg:[0.1,0.2],u:'mg',conc:10,cl:'10 mg/mL',rule:'IV/IO 0.1–0.2 mg/kg (from 12 months)',note:'Repeat at >3 min intervals.'}]},
+ {g:'Analgesia',n:'Ketamine – procedural',c:'induction',src:'p19',rows:[
+  {who:'adult',kg:[2],u:'mg',max:200,conc:100,cl:'100 mg/mL (200 mg/2 mL)',rule:'IM 2 mg/kg · max 200 mg'},
+  {who:'adult',kg:[0.5],u:'mg',conc:10,cl:'10 mg/mL',rule:'IV/IO loading up to 0.5 mg/kg',note:'Then 10 mg after 2 min, further 10 mg at >1 min intervals until adequately sedated.'},
+  {who:'paed',kg:[1],u:'mg',conc:100,cl:'100 mg/mL (200 mg/2 mL)',rule:'IM 1 mg/kg',note:'Then 0.5 mg/kg at 5 min intervals.'},
+  {who:'paed',kg:[0.2],u:'mg',conc:10,cl:'10 mg/mL',rule:'IV/IO loading up to 0.2 mg/kg',note:'Then 0.1 mg/kg after 2 min; further 0.1 mg/kg at >1 min intervals until adequately sedated.'},
+  {who:'paed',kg:[0.1],u:'mg',conc:10,cl:'10 mg/mL',rule:'IV/IO subsequent 0.1 mg/kg'}]},
+
+ {g:'Asthma',n:'Magnesium sulphate 50%',c:'elec',src:'p30 · AutoCalc',rows:[
+  {who:'adult',fixed:[2000],u:'mg',conc:500,cl:'500 mg/mL',rule:'2 g (4 mL) IV over 30 min'},
+  {who:'paed',kg:[40],u:'mg',max:2000,conc:500,cl:'500 mg/mL',rule:'40 mg/kg IV over 30 min · max 2 g (asthma page)'},
+  {who:'paed',kg:[50],u:'mg',conc:500,cl:'500 mg/mL',rule:'50 mg/kg (0.1 mL/kg of 50%) over 20 min (AutoCalc sheet)',note:'Dilute to at least 12.5 mL.',flag:'The booklet gives two paediatric doses: 40 mg/kg (asthma page) and 50 mg/kg (AutoCalc sheet). Confirm which applies.'}]},
+ {g:'Asthma',n:'Salbutamol nebulised',c:'other',src:'p30',rows:[
+  {who:'adult',fixed:[5,10],u:'mg',rule:'1–2 UDVs (5–10 mg in 2.5–5 mL) with 6–8 L/min O₂',note:'Continuous nebulisation in life-threatening asthma; repeat as clinically required.'}]},
+ {g:'Asthma',n:'Ipratropium bromide nebulised',c:'other',src:'p30',rows:[
+  {who:'all',fixed:[500],u:'mcg',conc:250,cl:'250 mcg/mL',rule:'500 mcg in 2 mL',note:'Repeat every 20 min; maximum 3 doses.'}]},
+ {g:'Asthma',n:'Hydrocortisone',c:'other',src:'p30',rows:[
+  {who:'adult',fixed:[100],u:'mg',rule:'100 mg slow IV'}]},
+ {g:'Asthma',n:'Fentanyl – asthma',c:'opioid',src:'p29–30',rows:[
+  {who:'adult',fixed:[25],u:'mcg',conc:50,cl:'50 mcg/mL',rule:'Low dose early, 25 mcg',note:'Small doses titrated against respiratory rate, goal 15–20 breaths/min. May need more than expected.'}]},
+
+ {g:'Seizures',n:'Midazolam IM',c:'benzo',src:'AutoCalc (paed)',rows:[
+  {who:'paed',kg:[0.15],u:'mg',conc:5,cl:'5 mg/mL',rule:'0.15 mg/kg IM'}]},
+ {g:'Seizures',n:'Phenytoin',c:'benzo',src:'AutoCalc (paed)',rows:[
+  {who:'paed',kg:[20],u:'mg',rule:'20 mg/kg IV over 20 min',note:'Undiluted preferred; may dilute up to 30 mL.'}]},
+
+ {g:'Antidotes & electrolytes',n:'Naloxone',c:'elec',src:'AutoCalc (paed)',rows:[
+  {who:'paed',kg:[2],u:'mcg',conc:20,cl:'20 mcg/mL',rule:'2 mcg/kg IV',note:'Dilute 400 mcg to 20 mL = 20 mcg/mL. Repeat as needed.'}]},
+ {g:'Antidotes & electrolytes',n:'Calcium gluconate 10%',c:'elec',src:'p24 · p26 · AutoCalc',rows:[
+  {who:'adult',fixed:[10],u:'mL',rule:'10 mL (2.2 mmol) IV/IO slow push over 3–5 min',note:'Hyperkalaemia with ECG signs, or calcium channel blocker toxicity. Repeat once or twice if required, titrated to ECG.'},
+  {who:'paed',kg:[0.7],u:'mL',max:10,rule:'0.7 mL/kg (0.15 mmol/kg) slow push over 3–5 min · max 10 mL',note:'Repeat once or twice if required.',flag:'The AutoCalc sheet lists a fixed 5 mL at 10 kg (0.5 mL/kg). The hyperkalaemia and CCB pages give 0.7 mL/kg.'}]},
+ {g:'Antidotes & electrolytes',n:'Sodium bicarbonate 8.4% – hyperkalaemia',c:'elec',src:'p24',rows:[
+  {who:'adult',fixed:[100],u:'mL',rule:'8.4 g in 100 mL IV/IO slow push, once only'},
+  {who:'paed',kg:[1],u:'mL',rule:'1 mL/kg (84 mg/kg) IV/IO slow push, once only'}]},
+ {g:'Antidotes & electrolytes',n:'Glucose 50% – beta-blocker / CCB toxicity',c:'fluid',src:'p25–26',rows:[
+  {who:'adult',fixed:[50],u:'mL',rule:'25 g (50 mL of 50%) before insulin',note:'Then ongoing glucose as needed to keep BSL 5.5–14 mmol/L.'}]},
+ {g:'Antidotes & electrolytes',n:'Insulin (Actrapid) bolus – beta-blocker / CCB toxicity',c:'elec',src:'p25–26',rows:[
+  {who:'all',kg:[1],u:'units',conc:100,cl:'100 units/mL',rule:'1 unit/kg IV bolus',note:'ASMA approval required. Only for critically ill patients: SBP <90 despite fluid and atropine, HR <60 unresponsive to atropine, or 2nd/3rd degree block.'}]},
+ {g:'Antidotes & electrolytes',n:'Insulin (Actrapid) – hyperkalaemia',c:'elec',src:'p23–24',rows:[
+  {who:'all',fixed:[10],u:'units',rule:'10 units with 50 mL of 50% glucose over 15 min',note:'Mix 10 units (0.1 mL) Actrapid with 49.9 mL 50% glucose = 0.2 units/mL. Over 15 min = 200 mL/hr. Treat K⁺ >6.5, repeat as needed to get K⁺ <6.5.'}]},
+
+ {g:'TCA overdose',n:'Sodium chloride 0.9%',c:'fluid',src:'p27',rows:[
+  {who:'all',kg:[20],u:'mL',rule:'20 mL/kg crystalloid bolus for hypotension'}]},
+ {g:'TCA overdose',n:'Sodium bicarbonate 8.4% – TCA',c:'elec',src:'p27–28',rows:[
+  {who:'all',kg:[1,2],u:'mmol',conc:1,cl:'1 mmol/mL',rule:'1–2 mmol/kg if ECG shows toxicity (pre-intubation / on arrival)',note:'Aim pH 7.5–7.55. Give as bolus, not infusion. Too much can cause iatrogenic death.'},
+  {who:'all',kg:[2],u:'mmol',conc:1,cl:'1 mmol/mL',rule:'Ventricular dysrhythmia: 2 mmol/kg every 1–2 min'},
+  {who:'all',kg:[6],u:'mmol',conc:1,cl:'1 mmol/mL',rule:'Maximum total 6 mmol/kg'},
+  {who:'all',kg:[0.5],u:'mmol',conc:1,cl:'1 mmol/mL',rule:'Quick card: start 1 mL/kg (or 100 mL), then 0.5 mL/kg every 2–3 min'}]},
+ {g:'TCA overdose',n:'Lignocaine',c:'other',src:'p27',rows:[
+  {who:'all',kg:[1.5],u:'mg',rule:'1.5 mg/kg IV – third line, only once pH >7.5',note:'Amiodarone is contraindicated. If not responding, urgently call a toxicologist.'}]}
+];
+
+/* ---------- infusions ---------- */
+var INF=[
+ {id:'adr',n:'Adrenaline',c:'vaso',src:'p15 · p31',prep:'3 mg / 50 mL = 60 mcg/mL. Use 1 mg/1 mL ampoules: 3 mL up to 50 mL 0.9% saline or 5% dextrose.',conc:60,units:['mcg/min','mcg/kg/min'],presets:{'mcg/min':[2,5,10,20],'mcg/kg/min':[0.1]},def:['mcg/min',2],
+  notes:['Commence at 2 mcg/min (2 mL/hr) and adjust to response.','Anaphylaxis: 0.1 mcg/kg/min (ARC ALS2).','Life-threatening asthma: 5 mcg/min, titrate to effect.','Post-ROSC: 50 mcg every 3–5 min.','Contraindicated in quetiapine toxicity: use noradrenaline.']},
+ {id:'nor',n:'Noradrenaline',c:'vaso',src:'p16',prep:'3 mg / 50 mL = 60 mcg/mL. From 4 mg/4 mL ampoule: 3 mL + 47 mL 5% dextrose.',conc:60,units:['mcg/min'],presets:{'mcg/min':[1,5,10,20]},def:['mcg/min',5],
+  notes:['Commence at 5 mcg/min (5 mL/hr); change by 1–2 mcg/min every 3–5 min guided by MAP.','Hypotension refractory to fluids; distributive shock; quetiapine toxicity.','Caution with MAOI therapy and hypovolaemic shock.']},
+ {id:'met',n:'Metaraminol',c:'vaso',src:'p17',prep:'10 mg / 20 mL = 0.5 mg/mL. 10 mg/10 mL ampoule diluted up to 20 mL 0.9% saline.',conc:0.5,units:['mg/hr'],presets:{'mg/hr':[5]},def:['mg/hr',5],
+  notes:['Bolus 0.5–1 mL (0.25–0.5 mg) to effect, then infusion if required. Titrate from starting dose.','Contraindicated: hypersensitivity, hypovolaemia, MAOIs within 14 days.','Hypotension: SBP fall >30% from baseline; children 1–10 y: <70 + (2 × age) mmHg.']},
+ {id:'fen',n:'Fentanyl',c:'opioid',src:'p18',prep:'500 mcg / 50 mL = 10 mcg/mL. 500 mcg/10 mL ampoule + 40 mL 0.9% saline.',conc:10,units:['mcg/kg/hr'],presets:{'mcg/kg/hr':[1,1.5,2]},def:['mcg/kg/hr',1],
+  notes:['Adult and paediatric: 1–2 mcg/kg/hr, commencing at 1 mcg/kg/hr.']},
+ {id:'ket',n:'Ketamine',c:'induction',src:'p20',prep:'200 mg / 50 mL = 4 mg/mL. 200 mg/2 mL diluted up to 50 mL 0.9% saline.',conc:4,units:['mg/kg/hr'],presets:{'mg/kg/hr':[0.1,0.2,0.25,0.5,1]},def:['mg/kg/hr',0.5],
+  notes:['Sedation: 0.25–1 mg/kg/hr, commence 0.5 mg/kg/hr.','Analgesia: 0.1–0.5 mg/kg/hr, commence 0.2 mg/kg/hr.'],
+  flag:'Two values in the booklet table are typos: 50 kg at 1 mg/kg/hr reads 12.25 mL/hr (correct: 12.5) and 90 kg at 1 mg/kg/hr reads 22.25 mL/hr (correct: 22.5).'},
+ {id:'ins',n:'Insulin (Actrapid) – beta-blocker / CCB',c:'elec',src:'p25–26',prep:'50 units / 50 mL = 1 unit/mL. 50 units (0.5 mL) Actrapid + 49.5 mL 0.9% saline.',conc:1,units:['units/kg/hr'],presets:{'units/kg/hr':[0.5]},def:['units/kg/hr',0.5],
+  notes:['ASMA approval required. Give glucose 25 g and the 1 unit/kg bolus first.','Keep BSL 5.5–14 mmol/L.'],
+  flag:'The calcium channel blocker table in the booklet shows half these mL/hr values (e.g. 50 kg = 12.5 mL/hr). At 1 unit/mL, 0.5 units/kg/hr at 50 kg is 25 mL/hr, which matches the beta-blocker table. Check which is intended.'}
+];
+
+/* ---------- RSI (Dr Andy Challen) ---------- */
+var CH={
+ adult:{label:'Adults (>14 y)',cut:[0.8,1.0,1.2],txt:['< 0.8','0.8 – 1.0','1.0 – 1.2','> 1.2'],f:[3,0,0,0],k:[1,1,0.5,0.25],k2:[2,1,0.5,0.25]},
+ c7:{label:'Children 7–14 y',cut:[1,1.25,1.5],txt:['< 1','1 – 1.25','1.25 – 1.5','> 1.5'],f:[3,0,0,0],k:[1.5,1.5,0.75,0.5]},
+ u7:{label:'Children < 7 y',cut:[1.25,1.5,1.75],txt:['< 1.25','1.25 – 1.5','1.5 – 1.75','> 1.75'],f:[3,0,0,0],k:[2,2,1,0.5]}
+};
+function band(t,si){if(si<t.cut[0])return 0;if(si<t.cut[1])return 1;if(si<=t.cut[2])return 2;return 3}
+
+/* ---------- paed airway chart ---------- */
+var AW={ages:['Premature','Newborn','3–12 mo','1 y','2 y','4 y','6 y','8 y','10 y','12 y','Adolescent','Adult'],
+ rows:[['Uncuffed ETT',['2.5','','','','','','','','','','','']],['Cuffed ETT',['','3','3.5','3.5','4','4.5','5','5–6','6','6–7','7','7–8']],['Oral depth (cm)',['8','9–10','10.5–12','12.5–13.5','13.5','14','15','16','17','18','21','21']],['Macintosh blade',['0','0','0','1','2','2','2','2','2–3','3','3','3–4']],['Miller blade',['0','0','0','1','2','2','2','2','2–3','2–3','2, 3, 4','2, 3, 4']],['NG / OG tube (Fr)',['10','10','10','10','10','10','10, 12, 14','10, 12, 14','12, 14','12, 14','14, 18','14, 18']]]};
+function awCol(a){if(a==null)return -1;if(a===0)return 1;if(a<1)return 2;if(a>=18)return 11;if(a>12)return 10;var pts=[[1,3],[2,4],[4,5],[6,6],[8,7],[10,8],[12,9]];var best=3,bd=1e9;pts.forEach(function(p){var d=Math.abs(a-p[0]);if(d<bd||(d===bd&&p[0]>a)){bd=d;best=p[1]}});return best}
+
+/* ---------- ventilator & NIV ---------- */
+var VENT={cols:['Normal lungs','Asthma / COPD','Metabolic acidosis','ARDS','ALI','Head injury','Severe obesity'],
+ vt:[[8],[5,8],[8,10],[6],null,[6,8],[8,10]],
+ rows:[['Mode',['VC (SIMV)','VC (SIMV)','PC (APRV equiv)','VC (SIMV)','PC (APRV equiv)','VC (SIMV)','VC (SIMV)']],['Vt (mL/kg)',['8','5–8','8–10','6','monitor','6–8','8–10']],['Resp rate',['14','8–10','20–30','14','14','16','14']],['I:E',['1:2','1:4 – 1:5','1:1 – 1:2','2:1','2–4:1','1:2','1:1 – 1:2']],['Pinsp (cmH₂O)',['–','–','–','–','25–30','–','–']],['PEEP (cmH₂O)',['5','Asthma 0 · COPD 5','5','10–15','10–15','5','10–15']]],
+ other:['Adjust parameters to keep O₂ and CO₂ within normal limits.','Minimise derecruitment (minimise suctioning and disconnection). Consider recruitment manoeuvres.','Watch for breath stacking and volu/barotrauma. Consider permissive hypercapnoea, pH >7.15. May need to accept higher peak pressures in asthmatics. Aim Pplat <30.','Watch pressures; may need to lower Vt and accept higher CO₂. Titrate FiO₂ and PEEP.','Minimise derecruitment.','Avoid high PEEP if possible. Aim pCO₂ 35–45. Tape rather than tie the ETT to avoid impeding jugular venous flow.','Minimise derecruitment (minimise suctioning and disconnections).']};
+var NIV={cols:['APO (CPAP)','COPD (BiPAP)','Asthma (BiPAP)','Blunt thoracic trauma (BiPAP)'],rows:[
+ ['Aim',['Treat refractory hypoxaemia; relieve dyspnoea','Improve hypercapnia and respiratory acidosis; reduce WOB','Improve gas exchange; reduce WOB; support before intubation','Improve compliance and FRC; improve V/Q mismatch']],
+ ['Select',['Hx APO, RR >25, refractory hypoxia on high-flow O₂','Hx COPD, pH <7.35, RR >25, pCO₂ >45','RR >25, HR >110, accessory muscles, hypercapnia','Flail chest, >4 L O₂ for sats >92%, BMI >33 with chest injury, RR >25']],
+ ['Position',['Upright','Upright','Upright','Minimum 30° head up']],
+ ['Mode',['NIV (CPAP)','NIV-ST (BiPAP)','NIV-ST (BiPAP)','NIV-ST (BiPAP)']],
+ ['PEEP / EPAP',['5 cmH₂O','4 cmH₂O','3–5 cmH₂O','7–10 cmH₂O']],
+ ['Pinsp / IPAP',['N/A','10 cmH₂O (6 on T1)','7–15 cmH₂O','6 cmH₂O']],
+ ['FiO₂',['1.0','28–50%','1.0','1.0']],
+ ['Adjust',['Titrate PEEP and FiO₂ for sats >94% and less WOB','Increase IPAP by 2 as tolerated to max 20; O₂ for sats 88–92%','Adjust IPAP to RR <25. High inspiratory flow, low I:E e.g. 1:5','Titrate PEEP for sats >90%; IPAP to RR <25']],
+ ['Cautions',['Rising PEEP can cause significant hypotension; consider inotrope infusion','Barotrauma','Dynamic hyperinflation if external PEEP > intrinsic PEEP; barotrauma','Start early. Caution with suspected PTX']]]};
+
+/* ---------- checklists ---------- */
+var LISTS=[
+ {id:'rsi',t:'CCP RSI challenge–response',items:['Patient position optimised – best area for RSI','2 × oxygen sources available','Pre-oxygenation (nasal prongs, NRB, BVM, PEEP, OPA, NPA)','Monitoring applied and visible (SpO₂, CO₂, ECG, NIBP)','2 × large-bore IV/IO access, chook’s foot, NaCl running','Haemodynamics optimised – NaCl, metaraminol, adrenaline, noradrenaline','Suction checked and working','BVM set up with O₂, cobbs, filter and EtCO₂ adapter','C-MAC set up and working','Backup laryngoscope and blade available','ETT size selected and tested, plus alternative sizes','Bougie / introducer','i-gel, lubricated','Tube tie / tape placed','20 mL syringe','Magill’s forceps','Surgical airway kit, size 5.5 / 6.0 ETT','RSI drugs pre-drawn with doses selected','Resus drugs: adrenaline 1:1000 and atropine','Airway assessment done (LEMON)','Airway plan briefed: A – C-MAC VL/DL, laryngoscope, bougie · B – i-gel · C – FONA','Roles allocated','“Check complete, commence RSI at …” – document start time','Count down 60 s post rocuronium · set timer','Press record on C-MAC']},
+ {id:'post',t:'Post-RSI checklist',items:['ETT placement checks; OPA / ETT secure, bite block','BVM and suction available','Haemodynamics reassessed (NaCl, metaraminol, adrenaline, noradrenaline)','Ongoing sedation (morphine & midazolam, ketamine, rocuronium)','Chest assessment and ventilation adequate (finger thoracostomy)','Consider NG / OG','NaCl set up','Temperature management','NIBP interval set','ETT cuff pressure monitored']},
+ {id:'pre',t:'Pre-RSI checklist',items:['O₂ supply adequate – 2 oxygen sources','Position: 360° access, bed up head up, MILS','Airway assessment: LEMON, BONES','Pre-oxygenation: VAPOX, BVM + PEEP, NP, NRB, OPA/NPA, FiO₂ 1.0','Monitoring: HR, SpO₂, EtCO₂, BP every 3 min','Haemodynamics optimised, 2 × IV access','Drugs: fluid, analgesia, sedation, paralysis, other','Equipment: BVM + PEEP, C-MAC + laryngoscope, Magill’s, SGD, ETT, tape/tie, suction, bougie, surgical']}
+];
+var REF=[
+ {t:'RSI pre-oxygenation by risk',h:'<div class="tbl-wrap"><table><tr><th>Phase</th><th>Hypoxaemic (SpO₂ ≤90%)</th><th>High risk (91–95%)</th><th>Low risk (96–100%)</th></tr><tr><td>Pre-oxygenation (3 min)</td><td>CPAP or BVM with PEEP</td><td>NRB, CPAP or BVM with PEEP</td><td>NRB with maximal O₂</td></tr><tr><td>Onset of relaxation (60 s)</td><td>CPAP or BVM with PEEP + nasal O₂ 15 L/min</td><td>NRB, CPAP or BVM with PEEP + nasal O₂ 15 L/min</td><td>NRB + nasal O₂ 15 L/min</td></tr><tr><td>Apnoea (ideally &lt;30 s)</td><td>Nasal O₂ 15 L/min</td><td>Nasal O₂ 15 L/min</td><td>Nasal O₂ 15 L/min</td></tr></table></div><p class="hint">Risk category from pulse oximetry on high-flow O₂.</p>'},
+ {t:'VAPOX quick set-up',h:'<ol class="notes"><li>Indication: SpO₂ not maintained &gt;90% on high-flow O₂ via NRB.</li><li>Head elevated.</li><li>Nasal prongs on and connected, O₂ not yet on.</li><li>Hamilton T1 NIV-ST: RR 6–8, Pinsp 10, PEEP 5, O₂ 100%, ETS 50%, flow trigger 2 L/min, Ti 2 s, P-ramp 50 ms.</li><li>Size NIV mask (bridge of nose to chin crease) and secure.</li><li>EtCO₂ sensor between mask and flow sensor.</li><li>Titrate PEEP 5–10 for SpO₂ &gt;98% for 3 min.</li><li>Ketamine may help compliance – titrate to max 1 mg/kg.</li><li>Apnoea: push RSI drugs, turn NP O₂ to 15 L/min (vent switches to PSV).</li><li>Keep 15 L/min throughout intubation.</li></ol>'},
+ {t:'VAPORS',h:'<ul class="notes"><li><b>Ventilation</b> – estimate pre-procedure minute ventilation; recognise extremes (COPD/asthma low, severe acidosis high).</li><li><b>Acidosis</b> – severe acidosis with respiratory compensation (DKA, salicylates, ARF); treat the cause before RSI where possible.</li><li><b>Pressures</b> – high plateau pressure reduces venous return; auto-PEEP can cause circulatory collapse.</li><li><b>Oxygenation</b> – keep alveoli open, oxygen gradients, safe apnoea time, PEEP.</li><li><b>Regurgitation</b> – position and ventilate to prevent vomiting; NG decompression for bowel obstruction.</li><li><b>Shock index</b> – HR/SBP identifies risk of life-threatening hypotension on induction.</li></ul>'},
+ {t:'Prehospital anaesthesia – 10 Ps',h:'<ol class="notes"><li>Preparation</li><li>Plan for failed intubation</li><li>Positioning</li><li>Pre-oxygenation</li><li>Pre-treatment</li><li>Paralysis and anaesthesia</li><li>Passing the tube</li><li>Proof of placement</li><li>Post-intubation management</li><li>Packing and transfer</li></ol>'},
+ {t:'IMIST-AMBO handover',h:'<ul class="notes"><li><b>I</b>dentification – name, DoB, gender</li><li><b>M</b>echanism / medical complaint – time of incident, patient contact</li><li><b>I</b>njuries / information</li><li><b>S</b>igns – RR, HR, cap refill, GCS (E V M), SpO₂, BP, temp, BSL, RACE</li><li><b>T</b>reatment and trends – airway, breathing, circulation, medication</li><li><i>Pause for questions</i></li><li><b>A</b>llergies · <b>M</b>edication (regular) · <b>B</b>ackground history · <b>O</b>ther (social, scene, relatives, concerns)</li><li><i>Pause for questions</i></li></ul>'},
+ {t:'Hamilton T1 – Pinsp',h:'<p class="hint">On Hamilton ventilators Pinsp in NIV-ST equals pressure support (delta above PEEP), not total inspiratory pressure. Ppeak = Pinsp + PEEP. Example: COPD BiPAP IPAP 10 / EPAP 4 → set PEEP 4 and Pinsp 6.</p>'}
+];
+
+/* ---------- render helpers ---------- */
+function clsStyle(c){return 'style="--cls:var('+CLS[c][1]+')"'}
+function calc(r){
+  var w=S.wt,lo=null,hi=null,capped=false,needW=false;
+  if(r.kg){if(w==null)needW=true;else{lo=r.kg[0]*w;hi=r.kg.length>1?r.kg[1]*w:null;if(r.max!=null){if(lo>r.max){lo=r.max;capped=true}if(hi!=null&&hi>r.max){hi=r.max;capped=true}}if(hi!=null&&hi===lo)hi=null}}
+  else{lo=r.fixed[0];hi=r.fixed.length>1?r.fixed[1]:null}
+  function vol(x){return x==null||!r.conc?null:x/r.conc}
+  return {lo:lo,hi:hi,capped:capped,needW:needW,vlo:vol(lo),vhi:vol(hi)};
+}
+function rangeTxt(a,b){return b==null?fmt(a):fmt(a)+'–'+fmt(b)}
+function rowHTML(r){
+  var g=group(),k=calc(r),dim=(g&&r.who!=='all'&&r.who!==g);
+  var who=r.who==='all'?'<span class="pill">All ages</span>':'<span class="pill'+(g===r.who?' a':'')+'">'+(r.who==='adult'?'Adult':'Paediatric')+'</span>';
+  var out;
+  if(k.needW)out='<div class="out"><span class="need">Enter weight</span></div>';
+  else{
+    var sub='';
+    if(k.vlo!=null)sub='<span>'+rangeTxt(k.vlo,k.vhi)+' mL of '+esc(r.cl)+'</span>';
+    else if(r.u==='mmol'&&r.conc)sub='';
+    if(k.capped)sub+='<span class="cap">capped at max</span>';
+    out='<div class="out"><b>'+rangeTxt(k.lo,k.hi)+' '+esc(r.u)+'</b>'+sub+'</div>';
+  }
+  return '<div class="row'+(dim?' dim':'')+'"><div class="who">'+who+'</div><div class="rule">'+esc(r.rule)+'</div>'+out+(r.note?'<p class="note">'+esc(r.note)+'</p>':'')+(r.flag?'<p class="flag">'+esc(r.flag)+'</p>':'')+'</div>';
+}
+
+function renderDoses(){
+  var groups=['All'];DRUGS.forEach(function(d){if(groups.indexOf(d.g)<0)groups.push(d.g)});
+  var q=S.q.toLowerCase();
+  var list=DRUGS.filter(function(d){return (S.filter==='All'||d.g===S.filter)&&(!q||(d.n+' '+d.g).toLowerCase().indexOf(q)>=0)});
+  var h='<div class="sec-h"><h2>Bolus doses</h2><p>'+(S.wt==null?'Enter weight above':'For '+fmt(S.wt)+' kg')+'</p></div>';
+  h+='<input class="inp" id="q" type="search" placeholder="Search drug" value="'+esc(S.q)+'" style="font-family:var(--f-ui);font-size:15px" autocomplete="off">';
+  h+='<div class="chips" role="group" aria-label="Filter">'+groups.map(function(x){return '<button class="chip" type="button" data-f="'+esc(x)+'" aria-pressed="'+(S.filter===x)+'">'+esc(x)+'</button>'}).join('')+'</div>';
+  if(group()==null)h+='<p class="hint">Enter the age to highlight adult (&gt;14 y) or paediatric doses. Doses for the other group are dimmed.</p>';
+  h+='<div class="list">';
+  list.forEach(function(d){
+    h+='<article class="drug" '+clsStyle(d.c)+'><header><h3>'+esc(d.n)+'</h3><span class="tag">'+esc(CLS[d.c][0])+'</span><span class="src">'+esc(d.src)+'</span></header>'+d.rows.map(rowHTML).join('')+'</article>';
+  });
+  if(!list.length)h+='<p class="hint">No drug matches “'+esc(S.q)+'”.</p>';
+  h+='</div><div class="legend">'+Object.keys(CLS).map(function(k){return '<span><i style="background:var('+CLS[k][1]+')"></i>'+CLS[k][0]+'</span>'}).join('')+'</div>';
+  return h;
+}
+
+var infState=sget('ccp.inf',{});
+function perHour(dose,unit,w){switch(unit){case 'mcg/min':return dose*60;case 'mcg/kg/min':return w==null?null:dose*w*60;case 'mcg/kg/hr':case 'mg/kg/hr':case 'units/kg/hr':return w==null?null:dose*w;default:return dose}}
+function needsW(u){return u.indexOf('/kg/')>=0}
+function renderInf(){
+  var w=S.wt,h='<div class="sec-h"><h2>Infusions</h2><p>'+(w==null?'Weight needed for /kg doses':'For '+fmt(w)+' kg')+'</p></div>';
+  INF.forEach(function(f){
+    var st=infState[f.id]||{u:f.def[0],d:f.def[1]};if(f.units.indexOf(st.u)<0)st={u:f.def[0],d:f.def[1]};
+    var d=num(st.d),ph=d==null?null:perHour(d,st.u,w),mlh=ph==null?null:ph/f.conc;
+    h+='<article class="inf" '+clsStyle(f.c)+' data-inf="'+f.id+'"><header class="sec-h"><h3>'+esc(f.n)+'</h3><span class="src">'+esc(f.src)+'</span></header><div class="prep">'+esc(f.prep)+'</div>';
+    h+='<div class="ctl"><div class="fld"><label for="inf-'+f.id+'">Dose</label><input class="inp" id="inf-'+f.id+'" data-k="d" inputmode="decimal" value="'+esc(st.d==null?'':st.d)+'"></div>';
+    h+='<div class="fld unitsel"><label for="infu-'+f.id+'">Unit</label>'+(f.units.length>1?'<select class="inp" id="infu-'+f.id+'" data-k="u">'+f.units.map(function(u){return '<option'+(u===st.u?' selected':'')+'>'+u+'</option>'}).join('')+'</select>':'<span class="inp" style="font-family:var(--f-ui);font-size:15px;background:none;border-color:transparent;padding-inline:0">'+st.u+'</span>')+'</div></div>';
+    h+='<div class="chips">'+(f.presets[st.u]||[]).map(function(p){return '<button type="button" class="chip" data-p="'+p+'" aria-pressed="'+(d===p)+'">'+p+' '+st.u+'</button>'}).join('')+'</div>';
+    h+='<div class="rate">'+(mlh==null?'<span>'+(needsW(st.u)&&w==null?'Enter weight to calculate':'Enter a dose')+'</span>':'<b>'+fmt(mlh)+'</b><span>mL/hr</span>'+(st.u==='mcg/kg/min'&&w!=null?'<span>= '+fmt(d*w)+' mcg/min</span>':'')+(st.u.indexOf('/kg/hr')>=0&&w!=null?'<span>= '+fmt(d*w)+' '+st.u.replace('/kg','')+'</span>':''))+'</div>';
+    var pres=[];f.units.forEach(function(u){(f.presets[u]||[]).forEach(function(p){pres.push([p,u])})});
+    if(pres.length>1){h+='<div class="tbl-wrap"><table><tr><th>Dose</th><th class="n">mL/hr</th></tr>'+pres.map(function(x){var v=perHour(x[0],x[1],w);return '<tr><td>'+x[0]+' '+x[1]+'</td><td class="n">'+(v==null?'—':fmt(v/f.conc))+'</td></tr>'}).join('')+'</table></div>'}
+    h+='<ul class="notes">'+f.notes.map(function(n){return '<li>'+esc(n)+'</li>'}).join('')+'</ul>'+(f.flag?'<p class="flag" style="margin:0">'+esc(f.flag)+'</p>':'')+'</article>';
+  });
+  // DKA
+  var bgl=num(sget('ccp.bgl',''));var dk=bgl==null?null:bgl<=5?0:bgl<=10?1:bgl<=15?2:bgl<=20?3:bgl<=25?4:5;
+  h+='<article class="inf" '+clsStyle('elec')+'><header class="sec-h"><h3>Insulin (Actrapid) – DKA / HHS</h3><span class="src">p25</span></header><div class="prep">50 units / 50 mL = 1 unit/mL in 0.9% saline. Management of DKA and HHS needs i-STAT.</div>';
+  h+='<div class="fld"><label for="bgl">Blood glucose (mmol/L)</label><input class="inp" id="bgl" inputmode="decimal" value="'+(bgl==null?'':bgl)+'"></div>';
+  h+='<div class="rate">'+(dk==null?'<span>Enter blood glucose</span>':'<b>'+dk+'</b><span>units/hr = '+dk+' mL/hr</span>')+'</div>';
+  var bands=['5 or less','5.1 – 10','10.1 – 15','15.1 – 20','20.1 – 25','Greater than 25'];
+  h+='<div class="tbl-wrap"><table><tr><th>BGL (mmol/L)</th><th class="n">units/hr (mL/hr)</th></tr>'+bands.map(function(b,i){return '<tr'+(dk===i?' class="hl"':'')+'><td>'+b+'</td><td class="n">'+i+'</td></tr>'}).join('')+'</table></div></article>';
+  // TCA pressor
+  h+='<article class="inf" '+clsStyle('vaso')+'><header class="sec-h"><h3>Noradrenaline / adrenaline – TCA overdose</h3><span class="src">p27</span></header><div class="prep">0.15 mg/kg in 50 mL 5% dextrose, run at 1–10 mL/hr (0.05–0.5 mcg/kg/min).</div>';
+  h+='<div class="rate">'+(w==null?'<span>Enter weight</span>':'<b>'+fmt(0.15*w)+'</b><span>mg in 50 mL D5W</span>')+'</div>';
+  h+='<div class="tbl-wrap"><table><tr><th class="n">mL/hr</th><th class="n">mcg/kg/min</th><th class="n">mcg/min</th></tr>'+[1,2,4,6,8,10].map(function(r){return '<tr><td class="n">'+r+'</td><td class="n">'+fmt(r*0.05)+'</td><td class="n">'+(w==null?'—':fmt(r*0.05*w))+'</td></tr>'}).join('')+'</table></div><ul class="notes"><li>Use peripherally at first until central access; extravasation risk as for push-dose pressors. Big flowing peripheral line.</li></ul></article>';
+  // Salbutamol
+  h+='<article class="inf" '+clsStyle('other')+'><header class="sec-h"><h3>Salbutamol infusion – paediatric</h3><span class="src">AutoCalc</span></header><div class="prep">5 mcg/kg/min, diluted to at least 15 mL. Concentration not stated in the booklet.</div><div class="rate">'+(w==null?'<span>Enter weight</span>':'<b>'+fmt(5*w)+'</b><span>mcg/min = '+fmt(5*w*60/1000)+' mg/hr</span>')+'</div></article>';
+  // custom
+  var c=sget('ccp.cust',{amt:'',au:'mg',vol:'50',dose:'',du:'mg/hr'});
+  h+='<article class="inf" '+clsStyle('other')+' id="cust"><header class="sec-h"><h3>Any infusion</h3><span class="src">calculator</span></header>';
+  h+='<div class="g2"><div class="fld"><label for="c-amt">Drug in syringe</label><input class="inp" id="c-amt" inputmode="decimal" value="'+esc(c.amt)+'"></div><div class="fld"><label for="c-au">Unit</label><select class="inp" id="c-au">'+['mg','mcg','units'].map(function(u){return '<option'+(u===c.au?' selected':'')+'>'+u+'</option>'}).join('')+'</select></div><div class="fld"><label for="c-vol">Total volume (mL)</label><input class="inp" id="c-vol" inputmode="decimal" value="'+esc(c.vol)+'"></div></div>';
+  h+='<div class="g2"><div class="fld"><label for="c-dose">Ordered dose</label><input class="inp" id="c-dose" inputmode="decimal" value="'+esc(c.dose)+'"></div><div class="fld"><label for="c-du">Unit</label><select class="inp" id="c-du">'+['mcg/min','mcg/kg/min','mcg/kg/hr','mcg/hr','mg/hr','mg/kg/hr','units/hr','units/kg/hr'].map(function(u){return '<option'+(u===c.du?' selected':'')+'>'+u+'</option>'}).join('')+'</select></div></div>';
+  h+='<div class="rate" id="c-out">'+custOut(c)+'</div></article>';
+  return h;
+}
+function custOut(c){
+  var amt=num(c.amt),vol=num(c.vol),dose=num(c.dose),w=S.wt;
+  if(amt==null||vol==null||vol<=0||dose==null)return '<span>Enter drug amount, volume and dose</span>';
+  var base=c.du.split('/')[0];var a=amt;
+  if(base!==c.au){if(base==='units'||c.au==='units')return '<span>Units and mass can’t be mixed</span>';a=c.au==='mg'?amt*1000:amt/1000}
+  var conc=a/vol;var u=c.du;var ph;
+  if(u==='mcg/hr')ph=dose;else ph=perHour(dose,u,w);
+  if(ph==null)return '<span>Enter weight to calculate</span>';
+  return '<b>'+fmt(ph/conc)+'</b><span>mL/hr · concentration '+fmt(conc)+' '+base+'/mL</span>';
+}
+
+function renderRSI(){
+  var hr=num(sget('ccp.hr','')),sbp=num(sget('ccp.sbp','')),si=(hr!=null&&sbp)?hr/sbp:null,cg=challenGroup(),w=S.wt;
+  var h='<div class="sec-h"><h2>RSI dosing by shock index</h2><p>Dr Andy Challen · p48</p></div>';
+  h+='<div class="g2"><div class="fld"><label for="hr">Heart rate</label><input class="inp" id="hr" inputmode="numeric" value="'+(hr==null?'':hr)+'"></div><div class="fld"><label for="sbp">Systolic BP</label><input class="inp" id="sbp" inputmode="numeric" value="'+(sbp==null?'':sbp)+'"></div></div>';
+  var cls=si==null?'':si>=0.9?' bad':si>=0.8?' warn':'';
+  h+='<div class="res'+cls+'"><small>Shock index = HR / SBP</small><span class="big">'+(si==null?'—':si.toFixed(2))+'</span>'+(si==null?'':si>=0.9?'<strong>≥0.9: associated with post-RSI hypotension and cardiac arrest</strong>':si>=0.8?'<strong>≥0.8: associated with post-RSI hypotension</strong>':'')+'</div>';
+  if(cg==null)h+='<p class="hint">Enter the patient’s age above to pick the right table (adult &gt;14 y, 7–14 y, &lt;7 y).</p>';
+  if(cg==='adult')h+='<div class="fld"><label>Adult table version</label><div class="seg" role="group"><button type="button" data-sheet="1" aria-pressed="'+(S.rsiSheet===1)+'">Sheet 1</button><button type="button" data-sheet="2" aria-pressed="'+(S.rsiSheet===2)+'">Sheet 2</button></div><p class="hint">The booklet has two versions of this page. They differ only for adults with SI &lt;0.8: ketamine 1 mg/kg (sheet 1) or 2 mg/kg (sheet 2).</p></div>';
+  ['adult','c7','u7'].forEach(function(key){
+    var t=CH[key],kk=(key==='adult'&&S.rsiSheet===2)?t.k2:t.k,b=(si!=null&&cg===key)?band(t,si):-1;
+    if(cg&&cg!==key)return;
+    h+='<div class="panel"><h3 style="font-size:16px">'+t.label+'</h3><div class="tbl-wrap"><table><tr><th>SI</th><th class="n">Fentanyl</th><th class="n">Ketamine</th><th class="n">Rocuronium</th></tr>';
+    for(var i=0;i<4;i++){h+='<tr'+(b===i?' class="hl"':'')+'><td class="num">'+t.txt[i]+'</td><td class="n">'+(t.f[i]?t.f[i]+' mcg/kg':'Nil')+'</td><td class="n">'+kk[i]+' mg/kg</td><td class="n">2 mg/kg</td></tr>'}
+    h+='</table></div>';
+    if(b>=0){
+      if(w==null)h+='<p class="hint">Enter weight to calculate doses.</p>';
+      else{
+        var f=t.f[b]*w,k=kk[b]*w,r=2*w;
+        h+='<div class="list">'+
+         '<div class="drug" '+clsStyle('opioid')+'><div class="row" style="border:0"><div class="rule"><b>Fentanyl</b><br><span class="hint">'+(t.f[b]?t.f[b]+' mcg/kg · 50 mcg/mL':'Nil in this band')+'</span></div><div class="out"><b>'+(t.f[b]?fmt(f)+' mcg':'Nil')+'</b>'+(t.f[b]?'<span>'+fmt(f/50)+' mL</span>':'')+'</div></div></div>'+
+         '<div class="drug" '+clsStyle('induction')+'><div class="row" style="border:0"><div class="rule"><b>Ketamine</b><br><span class="hint">'+kk[b]+' mg/kg · 10 mg/mL</span></div><div class="out"><b>'+fmt(k)+' mg</b><span>'+fmt(k/10)+' mL</span></div></div></div>'+
+         '<div class="drug" '+clsStyle('nmb')+'><div class="row" style="border:0"><div class="rule"><b>Rocuronium</b><br><span class="hint">2 mg/kg · check vial concentration</span></div><div class="out"><b>'+fmt(r)+' mg</b></div></div></div></div>';
+      }
+    }
+    if(key==='c7')h+='<p class="hint">Over 14 years: treat as adult dosing.</p>';
+    h+='</div>';
+  });
+  h+='<p class="hint">Ketamine volumes use the 10 mg/mL dilution (200 mg in 20 mL). Fentanyl volumes use the 500 mcg/10 mL ampoule (50 mcg/mL).</p>';
+  return h;
+}
+
+function renderAirway(){
+  var a=S.age,col=awCol(a);
+  var h='<div class="sec-h"><h2>Paediatric airway sizes</h2><p>p47</p></div>';
+  if(a==null)h+='<p class="hint">Enter the age above (use decimals for infants, e.g. 0.5 = 6 months). The matching column is highlighted.</p>';
+  if(a!=null&&a>=1&&a<=14){
+    h+='<div class="g2"><div class="res"><small>Uncuffed ETT (age/4)+4</small><span class="big">'+fmt(a/4+4)+'</span></div><div class="res"><small>Cuffed ETT (age/4)+3.5</small><span class="big">'+fmt(a/4+3.5)+'</span></div><div class="res"><small>Oral depth (age/2)+12 cm</small><span class="big">'+fmt(a/2+12)+'</span></div><div class="res"><small>NG/OG ≈ ETT × 2 (Fr)</small><span class="big">'+fmt((a/4+4)*2)+'</span></div></div><p class="hint">Formulas: Cole (uncuffed), Duracher et al (cuffed), AHA (depth). Round ETT to the nearest available size.</p>';
+  }else if(a!=null)h+='<p class="hint">Formulas apply from 1 to 14 years. Use the chart.</p>';
+  h+='<div class="panel"><div class="tbl-wrap"><table><tr><th>Age</th>'+AW.rows.map(function(r){return '<th>'+r[0]+'</th>'}).join('')+'</tr>';
+  AW.ages.forEach(function(ag,i){h+='<tr'+(i===col?' class="hl"':'')+'><td>'+ag+'</td>'+AW.rows.map(function(r){return '<td class="num">'+(r[1][i]||'–')+'</td>'}).join('')+'</tr>'});
+  h+='</table></div></div>';
+  return h;
+}
+
+function renderTools(){
+  var w=S.wt,v=sget('ccp.tools',{});
+  function val(k){return v[k]==null?'':v[k]}
+  var h='<div class="sec-h"><h2>Tools &amp; reference</h2></div>';
+  // GCS
+  var E=num(v.ge),V=num(v.gv),M=num(v.gm),tot=(E&&V&&M)?E+V+M:null;
+  function sel(id,opts){return '<select class="inp" id="'+id+'" data-tool="'+id+'"><option value="">–</option>'+opts.map(function(o){return '<option value="'+o[0]+'"'+(String(v[id])===String(o[0])?' selected':'')+'>'+o[0]+' · '+o[1]+'</option>'}).join('')+'</select>'}
+  h+='<details class="panel" open><summary>Glasgow Coma Scale</summary><div class="g2"><div class="fld"><label for="ge">Eyes</label>'+sel('ge',[[4,'Spontaneously'],[3,'To speech'],[2,'To pain'],[1,'No response']])+'</div><div class="fld"><label for="gv">Verbal</label>'+sel('gv',[[5,'Oriented'],[4,'Confused'],[3,'Inappropriate words'],[2,'Incomprehensible'],[1,'No response']])+'</div><div class="fld"><label for="gm">Motor</label>'+sel('gm',[[6,'Obeys commands'],[5,'Localises pain'],[4,'Flexion withdrawal'],[3,'Abnormal flexion'],[2,'Abnormal extension'],[1,'No response']])+'</div></div><div class="res'+(tot!=null&&tot<12?' warn':'')+'"><small>GCS</small><span class="big">'+(tot==null?'—':'E'+E+' V'+V+' M'+M+' = '+tot)+'</span>'+(tot!=null&&tot<12?'<strong>GCS &lt;12 in TCA overdose: prompt intubation and hyperventilation</strong>':'')+'</div></details>';
+  // MAP / SI
+  var sb=num(v.sbp2),db=num(v.dbp2),hr=num(v.hr2),map=(sb&&db)?(sb+2*db)/3:null,si=(sb&&hr)?hr/sb:null;
+  h+='<details class="panel" open><summary>MAP &amp; shock index</summary><div class="g2"><div class="fld"><label for="sbp2">SBP</label><input class="inp" id="sbp2" data-tool="sbp2" inputmode="numeric" value="'+val('sbp2')+'"></div><div class="fld"><label for="dbp2">DBP</label><input class="inp" id="dbp2" data-tool="dbp2" inputmode="numeric" value="'+val('dbp2')+'"></div><div class="fld"><label for="hr2">HR</label><input class="inp" id="hr2" data-tool="hr2" inputmode="numeric" value="'+val('hr2')+'"></div></div><div class="g2"><div class="res'+(map!=null&&map<=65?' warn':'')+'"><small>MAP = (SBP + 2 × DBP) / 3 · target &gt;65</small><span class="big">'+(map==null?'—':fmt(map))+'</span></div><div class="res'+(si==null?'':si>=0.9?' bad':si>=0.8?' warn':'')+'"><small>Shock index = HR / SBP</small><span class="big">'+(si==null?'—':si.toFixed(2))+'</span></div></div>'+
+   (S.age!=null&&S.age>=1&&S.age<=10?'<div class="res"><small>Paed hypotension threshold (1–10 y): 70 + 2 × age</small><span class="big">'+fmt(70+2*S.age)+' mmHg</span></div>':'<p class="hint">Children 1–10 y: hypotension is SBP &lt; 70 + (2 × age). Enter the age to calculate.</p>')+'</details>';
+  // Blood gas
+  h+='<details class="panel"><summary>Blood gas interpretation</summary><div class="seg" role="group"><button type="button" data-bg="a" aria-pressed="'+(v.bgt!=='v')+'">Arterial</button><button type="button" data-bg="v" aria-pressed="'+(v.bgt==='v')+'">Venous</button></div><div class="g2"><div class="fld"><label for="ph">pH</label><input class="inp" id="ph" data-tool="ph" inputmode="decimal" value="'+val('ph')+'"></div><div class="fld"><label for="pco2">pCO₂ (mmHg)</label><input class="inp" id="pco2" data-tool="pco2" inputmode="decimal" value="'+val('pco2')+'"></div><div class="fld"><label for="hco3">HCO₃ (mEq/L)</label><input class="inp" id="hco3" data-tool="hco3" inputmode="decimal" value="'+val('hco3')+'"></div></div>'+bgOut(v)+
+   '<div class="tbl-wrap"><table><tr><th></th><th>Arterial</th><th>Venous</th></tr><tr><td>pH</td><td class="num">7.35–7.45</td><td class="num">7.31–7.41</td></tr><tr><td>pO₂</td><td class="num">80–100 mmHg</td><td class="num">30–40 mmHg</td></tr><tr><td>SaO₂ / SvO₂</td><td class="num">95–100%</td><td class="num">60–80%</td></tr><tr><td>pCO₂</td><td class="num">35–45 mmHg</td><td class="num">40–50 mmHg</td></tr><tr><td>HCO₃</td><td class="num" colspan="2">22–26 mEq/L</td></tr><tr><td>BE</td><td class="num" colspan="2">−2 to +2</td></tr></table></div></details>';
+  // Vent
+  h+='<details class="panel"><summary>Ventilator settings</summary><p class="hint">Position 20–30° head up unless hypotensive and reduced cerebral perfusion is a concern. FiO₂: start 100%, titrate down, ideally 0.4; SpO₂ ≥95%, pO₂ &gt;70, Pplat &lt;30.</p><div class="tbl-wrap"><table><tr><th></th>'+VENT.cols.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr><tr class="hl"><td>Vt for '+(w==null?'– kg':fmt(w)+' kg')+'</td>'+VENT.vt.map(function(x){return '<td class="num">'+(x==null||w==null?'–':rangeTxt(x[0]*w,x[1]!=null?x[1]*w:null)+' mL')+'</td>'}).join('')+'</tr>'+VENT.rows.map(function(r){return '<tr><td>'+r[0]+'</td>'+r[1].map(function(c){return '<td>'+c+'</td>'}).join('')+'</tr>'}).join('')+'<tr><td>Other</td>'+VENT.other.map(function(c){return '<td style="min-width:180px">'+c+'</td>'}).join('')+'</tr></table></div><p class="hint">Vt uses the weight entered above. The booklet does not say whether to use actual or ideal body weight.</p></details>';
+  // NIV
+  h+='<details class="panel"><summary>NIV – CPAP / BiPAP</summary><div class="tbl-wrap"><table><tr><th></th>'+NIV.cols.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr>'+NIV.rows.map(function(r){return '<tr><td>'+r[0]+'</td>'+r[1].map(function(c){return '<td style="min-width:150px">'+c+'</td>'}).join('')+'</tr>'}).join('')+'</table></div><p class="hint">Asthma (p30): CPAP 10 cmH₂O; if tidal volume low switch to BiPAP adding IPAP 2 cmH₂O at a time; aim RR 10–20.</p></details>';
+  // iSTAT
+  var IS=[['CG4+','pH','7.31 – 7.41',''],['','PCO₂','41 – 51','mmHg'],['','PO₂','80 – 105','mmHg'],['','BEecf','−2 – 3','mmol/L'],['','HCO₃','23 – 28','mmol/L'],['','TCO₂','24 – 29','mmol/L'],['','sO₂','95 – 98','%'],['','Lactate','0.36 – 1.25','mmol/L'],['CHEM8+','Na','138 – 146','mmol/L'],['','K','3.5 – 4.9','mmol/L'],['','Cl','98 – 109','mmol/L'],['','iCa','1.12 – 1.32','mmol/L'],['','TCO₂','24 – 29','mmol/L'],['','Urea','8 – 26','mmol/L'],['','Creatinine ♂','62 – 115','µmol/L'],['','Creatinine ♀','53 – 97','µmol/L'],['','Hct ♂','41 – 50','%'],['','Hct ♀','36 – 48','%'],['','Hb ♂','138 – 172','g/L'],['','Hb ♀','121 – 151','g/L'],['','Anion gap','10 – 20','mmol/L']];
+  h+='<details class="panel"><summary>i-STAT venous reference ranges</summary><div class="tbl-wrap"><table><tr><th>Cartridge</th><th>Test</th><th class="n">Range</th><th>Unit</th></tr>'+IS.map(function(r){return '<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td class="n">'+r[2]+'</td><td>'+r[3]+'</td></tr>'}).join('')+'</table></div><p class="hint">As printed in the booklet (urea range 8–26 as given).</p></details>';
+  // HyperK
+  h+='<details class="panel"><summary>Hyperkalaemia – ECG changes</summary><div class="tbl-wrap"><table><tr><th>K⁺ (mmol/L)</th><th>Mechanism</th><th>ECG</th></tr><tr><td class="num">5.5–6.5</td><td>Repolarisation abnormalities</td><td>Peaked T waves</td></tr><tr><td class="num">6.5–7.0</td><td>Progressive atrial paralysis</td><td>P wave widening/flattening, PR prolongation, P waves disappear</td></tr><tr><td class="num">7.0–9.0</td><td>Conduction abnormalities</td><td>Bradyarrhythmias, high-grade AV block, slow AF, BBB/fascicular blocks, wide bizarre QRS</td></tr><tr><td class="num">&gt;9.0</td><td>All of the above</td><td>Sine wave (pre-terminal); asystole, VF, PEA with wide bizarre complexes</td></tr></table></div><p class="hint">Treat K⁺ &gt;6.5: calcium gluconate, sodium bicarbonate, insulin + glucose (see Doses).</p></details>';
+  // TCA
+  h+='<details class="panel"><summary>TCA overdose – key points</summary><ul class="notes"><li>Common TCAs: amitriptyline, clomipramine, dothiepin (more seizures), doxepin, imipramine, nortriptyline, trimipramine.</li><li>Toxic overdose &gt;10 mg/kg with signs of toxicity.</li><li>QRS &gt;100 ms predicts seizures; &gt;160 ms predicts ventricular arrhythmias.</li><li>ECG: wide QRS, large terminal R in aVR, R/S &gt;0.7 in aVR, QT prolongation.</li><li>Aim pH 7.5–7.55: sodium bicarbonate bolus plus hyperventilation. Intubate early if GCS &lt;12.</li><li>Amiodarone contraindicated. Seizures: benzodiazepines.</li><li>Charcoal only once the airway is secure, via NG.</li><li>Target QRS normal for the patient or &lt;140 ms.</li></ul>'+(w!=null?'<div class="res"><small>Toxic threshold for '+fmt(w)+' kg (10 mg/kg)</small><span class="big">'+fmt(10*w)+' mg</span></div>':'')+'</details>';
+  // Log
+  var log=sget('ccp.log',[]);
+  h+='<details class="panel"><summary>Disclaimer acceptance log ('+log.length+')</summary>'+(log.length?'<div class="tbl-wrap"><table><tr><th>When</th><th>Name</th><th>Role / reg.</th></tr>'+log.slice().reverse().map(function(e){return '<tr><td class="num">'+esc(new Date(e.t).toLocaleString())+'</td><td>'+esc(e.n)+'</td><td>'+esc(e.r||'')+'</td></tr>'}).join('')+'</table></div><button class="btn ghost" type="button" id="copy-log">Copy log</button>':'<p class="hint">No entries yet.</p>')+'<p class="hint">Stored on this device only.</p></details>';
+  return h;
+}
+function bgOut(v){
+  var ph=num(v.ph),pc=num(v.pco2),hc=num(v.hco3),ven=v.bgt==='v';
+  if(ph==null||pc==null||hc==null)return '<p class="hint">Enter pH, pCO₂ and HCO₃.</p>';
+  var phL=ven?7.31:7.35,phH=ven?7.41:7.45,pcL=ven?40:35,pcH=ven?50:45;
+  var P=ph<phL?'↓':ph>phH?'↑':'N',C=pc<pcL?'↓':pc>pcH?'↑':'N',H=hc<22?'↓':hc>26?'↑':'N';
+  var T={'N↑↓':'Respiratory acidosis','N↓↑':'Respiratory alkalosis','↓N↓':'Metabolic acidosis','↑N↑':'Metabolic alkalosis','↑↑↓':'Respiratory acidosis with metabolic compensation','↑↑↑':'Metabolic alkalosis with respiratory compensation','↓↑↓':'Metabolic and respiratory acidosis','↑↓↑':'Metabolic and respiratory alkalosis'};
+  var key=H+C+P,res=T[key];
+  var lab={'↓':'low','↑':'high','N':'normal'};
+  var line='HCO₃ '+lab[H]+' · pCO₂ '+lab[C]+' · pH '+lab[P];
+  if(res)return '<div class="res'+(P!=='N'?' warn':'')+'"><small>'+line+'</small><strong style="font-size:17px">'+res+'</strong></div>';
+  if(P==='N'&&C==='N'&&H==='N')return '<div class="res"><small>'+line+'</small><strong style="font-size:17px">Within normal range</strong></div>';
+  return '<div class="res"><small>'+line+'</small><strong style="font-size:15px">Pattern not in the booklet table – interpret clinically</strong></div>';
+}
+
+function renderLists(){
+  var ck=sget('ccp.ck',{});
+  var h='<div class="sec-h"><h2>Checklists</h2></div>';
+  LISTS.forEach(function(L,li){
+    var done=L.items.filter(function(_,i){return ck[L.id+i]}).length;
+    h+='<details class="panel"'+(li===0?' open':'')+'><summary>'+L.t+' <span class="hint num">'+done+'/'+L.items.length+'</span></summary><div>'+L.items.map(function(it,i){var id='ck-'+L.id+i;return '<label class="check" for="'+id+'"><input type="checkbox" id="'+id+'" data-ck="'+L.id+i+'"'+(ck[L.id+i]?' checked':'')+'><span>'+esc(it)+'</span></label>'}).join('')+'</div><button class="btn ghost" type="button" data-reset="'+L.id+'">Clear ticks</button></details>';
+  });
+  REF.forEach(function(r){h+='<details class="panel"><summary>'+r.t+'</summary>'+r.h+'</details>'});
+  return h;
+}
+
+/* ---------- main render ---------- */
+var view=$('#view');
+function render(keepFocus){
+  var act=document.activeElement,aid=act&&act.id,pos=null;
+  try{if(aid&&act.selectionStart!=null)pos=act.selectionStart}catch(e){}
+  var openD=$$('details.panel',view).map(function(d){return d.open});
+  var html={doses:renderDoses,inf:renderInf,rsi:renderRSI,airway:renderAirway,tools:renderTools,lists:renderLists}[S.tab]();
+  view.innerHTML=html;
+  if(keepFocus){var dd=$$('details.panel',view);openD.forEach(function(o,i){if(dd[i])dd[i].open=o})}
+  if(aid&&view.contains(document.getElementById(aid))===false){}
+  if(aid){var el=document.getElementById(aid);if(el&&view.contains(el)){el.focus();try{if(pos!=null)el.setSelectionRange(pos,pos)}catch(e){}}}
+  $$('nav.tabs button').forEach(function(b){b.setAttribute('aria-selected',String(b.dataset.tab===S.tab))});
+}
+function updGroup(){
+  var g=$('#grp'),cg=challenGroup();
+  g.textContent=cg==null?'Enter age':cg==='adult'?'Adult (>14 y)':cg==='c7'?'Child 7–14 y':'Child <7 y';
+  g.classList.toggle('on',cg!=null);
+}
+
+/* events */
+$('#wt').addEventListener('input',function(e){var n=num(e.target.value);S.wt=(n!=null&&n>0&&n<=300)?n:null;render(true)});
+$('#age').addEventListener('input',function(e){var n=num(e.target.value);S.age=(n!=null&&n>=0&&n<=120)?n:null;updGroup();render(true)});
+$$('nav.tabs button').forEach(function(b){b.addEventListener('click',function(){S.tab=b.dataset.tab;sset('ccp.tab',S.tab);render();window.scrollTo(0,0)})});
+$('#btn-home').addEventListener('click',function(){S.tab='doses';S.filter='All';S.q='';sset('ccp.tab','doses');render();window.scrollTo(0,0)});
+
+view.addEventListener('input',function(e){
+  var t=e.target;
+  if(t.id==='q'){S.q=t.value;render(true);return}
+  var card=t.closest('[data-inf]');
+  if(card){var id=card.dataset.inf,f=INF.filter(function(x){return x.id===id})[0],st=infState[id]||{u:f.def[0],d:f.def[1]};
+    if(t.dataset.k==='d')st.d=t.value;
+    if(t.dataset.k==='u'){st.u=t.value;st.d=(f.presets[st.u]||[''])[0]}
+    infState[id]=st;sset('ccp.inf',infState);render(true);return}
+  if(t.id==='bgl'){sset('ccp.bgl',t.value);render(true);return}
+  if(t.id&&t.id.indexOf('c-')===0){var c={amt:$('#c-amt').value,au:$('#c-au').value,vol:$('#c-vol').value,dose:$('#c-dose').value,du:$('#c-du').value};sset('ccp.cust',c);$('#c-out').innerHTML=custOut(c);return}
+  if(t.id==='hr'||t.id==='sbp'){sset('ccp.'+t.id,t.value);render(true);return}
+  if(t.dataset.tool){var v=sget('ccp.tools',{});v[t.dataset.tool]=t.value;sset('ccp.tools',v);render(true);return}
+});
+view.addEventListener('change',function(e){
+  var t=e.target;
+  if(t.dataset.ck){var ck=sget('ccp.ck',{});ck[t.dataset.ck]=t.checked;sset('ccp.ck',ck);render(true)}
+});
+view.addEventListener('click',function(e){
+  var b=e.target.closest('button');if(!b)return;
+  if(b.dataset.f){S.filter=b.dataset.f;render(true);return}
+  if(b.dataset.p){var card=b.closest('[data-inf]'),id=card.dataset.inf,f=INF.filter(function(x){return x.id===id})[0],st=infState[id]||{u:f.def[0],d:f.def[1]};st.d=b.dataset.p;infState[id]=st;sset('ccp.inf',infState);render(true);return}
+  if(b.dataset.sheet){S.rsiSheet=+b.dataset.sheet;render(true);return}
+  if(b.dataset.bg){var v=sget('ccp.tools',{});v.bgt=b.dataset.bg;sset('ccp.tools',v);render(true);return}
+  if(b.dataset.reset){var ck=sget('ccp.ck',{});Object.keys(ck).forEach(function(k){if(k.indexOf(b.dataset.reset)===0)delete ck[k]});sset('ccp.ck',ck);render(true);return}
+  if(b.id==='copy-log'){var log=sget('ccp.log',[]);var txt=log.map(function(e){return new Date(e.t).toLocaleString()+'\t'+e.n+'\t'+(e.r||'')}).join('\n');
+    try{navigator.clipboard.writeText(txt).then(function(){toast('Log copied')},function(){toast('Copy not allowed here')})}catch(err){toast('Copy not allowed here')}}
+});
+
+/* toast */
+var tt;function toast(m){var t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(function(){t.hidden=true},2600)}
+
+/* disclaimer gate (every launch) */
+var disc=$('#disc'),dn=$('#d-name'),dr=$('#d-reg'),dok=$('#d-ok'),dgo=$('#d-go');
+var last=sget('ccp.last',{});dn.value=last.n||'';dr.value=last.r||'';
+function dval(){dgo.disabled=!(dok.checked&&dn.value.trim().length>1)}
+[dn,dr].forEach(function(x){x.addEventListener('input',dval)});dok.addEventListener('change',dval);
+dgo.addEventListener('click',function(){var e={t:Date.now(),n:dn.value.trim(),r:dr.value.trim()};var log=sget('ccp.log',[]);log.push(e);if(log.length>500)log=log.slice(-500);sset('ccp.log',log);sset('ccp.last',{n:e.n,r:e.r});ssset('ccp.ok','1');disc.hidden=true;toast('Accepted by '+e.n)});
+if(ssget('ccp.ok')!=='1')disc.hidden=false;
+
+/* install / update */
+var deferred=null,ib=$('#btn-install');
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferred=e;ib.hidden=false});
+ib.addEventListener('click',function(){if(!deferred)return;deferred.prompt();deferred.userChoice.then(function(){deferred=null;ib.hidden=true})});
+var isNative=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
+var standalone=(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone;
+var isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+var UPDATE_URL='';/* optional: link to your APK releases page */
+$('#btn-update').addEventListener('click',function(){
+  if(isNative){if(UPDATE_URL){window.location.href=UPDATE_URL}else toast('Install the newest APK to update this app');return}
+  toast('Checking for updates…');
+  var p=Promise.resolve();
+  try{if('serviceWorker' in navigator)p=navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.update()}))})}catch(e){}
+  p.catch(function(){}).then(function(){try{return caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k)}))})}catch(e){}}).catch(function(){}).then(function(){setTimeout(function(){location.reload()},400)});
+});
+if(isIOS&&!standalone&&!isNative&&!sget('ccp.iosdismiss',false)){
+  var d=document.createElement('div');d.className='ios';d.innerHTML='<span>To install on iPhone or iPad: tap <b>Share</b>, then <b>Add to Home Screen</b>.</span><button type="button" aria-label="Dismiss">×</button>';
+  view.parentNode.insertBefore(d,view);d.style.margin='12px auto 0';d.style.maxWidth='688px';
+  d.querySelector('button').addEventListener('click',function(){sset('ccp.iosdismiss',true);d.remove()});
+}
+try{if('serviceWorker' in navigator&&location.protocol!=='file:'&&!/claude|anthropic/i.test(location.hostname))navigator.serviceWorker.register('sw.js').catch(function(){})}catch(e){}
+
+updGroup();render();
+window.__ccp={S:S,calc:calc,DRUGS:DRUGS,INF:INF,perHour:perHour,band:band,CH:CH,bgOut:bgOut,awCol:awCol};
+})();
+</script>
+</body>
+</html>
