@@ -36,12 +36,12 @@ jobs:
           npx cap init "$APP_NAME" "$APP_ID" --web-dir www
           npx cap add android
           npx cap sync android
-      - name: App icon
-        continue-on-error: true
+      - name: App icon + splash
         run: |
-          mkdir -p assets
-          cp icons/icon-512.png assets/icon-only.png
-          npx --yes @capacitor/assets@3 generate --android --iconBackgroundColor '#0B5D3B' --iconBackgroundColorDark '#0B5D3B'
+          cp -r native/android/res/. android/app/src/main/res/
+          rm -f android/app/src/main/res/drawable-v24/ic_launcher_foreground.xml
+          ls android/app/src/main/res/mipmap-anydpi-v26
+
       - name: Build APK
         working-directory: android
         run: |
@@ -72,12 +72,14 @@ jobs:
           npx cap init "$APP_NAME" "$APP_ID" --web-dir www
           npx cap add ios
           npx cap sync ios
-      - name: App icon
-        continue-on-error: true
+      - name: App icon + splash
         run: |
-          mkdir -p assets
-          cp icons/icon-512.png assets/icon-only.png
-          npx --yes @capacitor/assets@3 generate --ios --iconBackgroundColor '#0B5D3B'
+          ICON=ios/App/App/Assets.xcassets/AppIcon.appiconset
+          SPL=ios/App/App/Assets.xcassets/Splash.imageset
+          ls $ICON $SPL
+          cp native/ios/AppIcon-512@2x.png $ICON/
+          cp native/ios/splash-2732x2732*.png $SPL/
+
       - name: Build unsigned IPA
         working-directory: ios/App
         run: |
