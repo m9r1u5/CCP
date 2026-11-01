@@ -1,6 +1,6 @@
 node_modules/
-www/
-android/
-ios/
-assets/
-package*.json
+/www/
+/android/
+/ios/
+/assets/
+/package*.json
